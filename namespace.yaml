@@ -1,0 +1,10 @@
+---
+# namespace.yaml
+# Creates an isolated namespace for all trading algorithm PODs
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: algo-trading
+  labels:
+    app: nifty-predictor
+    environment: local

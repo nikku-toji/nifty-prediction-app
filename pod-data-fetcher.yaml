@@ -1,0 +1,107 @@
+---
+# pod-data-fetcher.yaml
+# This POD handles all data ingestion:
+#   - Angel One historical + live data
+#   - Yahoo Finance (US markets, crude, VIX)
+#   - News API (geopolitical sentiment)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-fetcher
+  namespace: algo-trading
+  labels:
+    app: data-fetcher
+    component: data-ingestion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-fetcher
+  template:
+    metadata:
+      labels:
+        app: data-fetcher
+        component: data-ingestion
+    spec:
+      containers:
+        - name: data-fetcher
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "uvicorn", "data_fetcher:app", "--host", "0.0.0.0", "--port", "8001"]
+          ports:
+            - containerPort: 8001
+              name: http
+          env:
+            # Inject secrets
+            - name: ANGEL_ONE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: algo-trading-secrets
+                  key: ANGEL_ONE_API_KEY
+            - name: ANGEL_ONE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: algo-trading-secrets
+                  key: ANGEL_ONE_CLIENT_ID
+            - name: ANGEL_ONE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: algo-trading-secrets
+                  key: ANGEL_ONE_PASSWORD
+            - name: ANGEL_ONE_TOTP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: algo-trading-secrets
+                  key: ANGEL_ONE_TOTP_SECRET
+            - name: NEWS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: algo-trading-secrets
+                  key: NEWS_API_KEY
+          envFrom:
+            - configMapRef:
+                name: algo-trading-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8001
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+      volumes:
+        - name: data-volume
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-fetcher-service
+  namespace: algo-trading
+  labels:
+    app: data-fetcher
+spec:
+  selector:
+    app: data-fetcher
+  ports:
+    - protocol: TCP
+      port: 8001
+      targetPort: 8001
+      name: http
+  type: ClusterIP

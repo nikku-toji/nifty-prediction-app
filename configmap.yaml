@@ -1,0 +1,36 @@
+---
+# configmap.yaml
+# Non-sensitive configuration shared across all trading PODs
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: algo-trading-config
+  namespace: algo-trading
+data:
+  # Trading Configuration
+  NIFTY_SYMBOL: "NIFTY"
+  NIFTY_EXCHANGE: "NSE"
+  TRADING_MODE: "paper"                # paper | live
+  PREDICTION_INTERVAL_MINUTES: "15"   # How often to re-predict
+  LOOKBACK_DAYS: "365"                 # History for training
+
+  # Data Sources
+  YAHOO_FINANCE_SYMBOLS: "^GSPC,^IXIC,CL=F,^VIX"   # S&P500, Nasdaq, Crude, VIX
+  NEWS_SOURCES: "reuters,bloomberg,economic-times,moneycontrol"
+  NEWS_LANGUAGE: "en"
+  NEWS_COUNTRY: "in,us"
+
+  # Model Configuration
+  MODEL_TYPE: "ensemble"               # ensemble | xgboost | lstm | random_forest
+  TRAIN_TEST_SPLIT: "0.8"
+  FEATURE_WINDOW: "20"                 # Rolling window in days
+  PREDICTION_HORIZON: "1"             # Days ahead to predict
+
+  # API Endpoints (internal cluster DNS)
+  DATA_FETCHER_URL: "http://data-fetcher-service:8001"
+  ML_PREDICTOR_URL: "http://ml-predictor-service:8002"
+
+  # Logging
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"

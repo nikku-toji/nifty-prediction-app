@@ -1,0 +1,157 @@
+---
+# pod-ml-predictor.yaml
+# This POD runs the ML/AI model:
+#   - Trains on historical data
+#   - Predicts CALL or PUT
+#   - Returns confidence, entry, SL, target
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-predictor
+  namespace: algo-trading
+  labels:
+    app: ml-predictor
+    component: prediction-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-predictor
+  template:
+    metadata:
+      labels:
+        app: ml-predictor
+        component: prediction-engine
+    spec:
+      containers:
+        - name: ml-predictor
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "uvicorn", "predictor:app", "--host", "0.0.0.0", "--port", "8002"]
+          ports:
+            - containerPort: 8002
+              name: http
+          envFrom:
+            - configMapRef:
+                name: algo-trading-config
+          env:
+            - name: ANGEL_ONE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: algo-trading-secrets
+                  key: ANGEL_ONE_API_KEY
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"       # ML models need more RAM
+              cpu: "2000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 60   # Model loading takes time
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8002
+            initialDelaySeconds: 45
+            periodSeconds: 15
+          volumeMounts:
+            - name: model-volume
+              mountPath: /app/models
+            - name: data-volume
+              mountPath: /app/data
+      volumes:
+        - name: model-volume
+          emptyDir: {}
+        - name: data-volume
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-predictor-service
+  namespace: algo-trading
+  labels:
+    app: ml-predictor
+spec:
+  selector:
+    app: ml-predictor
+  ports:
+    - protocol: TCP
+      port: 8002
+      targetPort: 8002
+      name: http
+  type: ClusterIP
+
+---
+# pod-dashboard.yaml
+# Web dashboard to visualize predictions, backtest results, signals
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nifty-dashboard
+  namespace: algo-trading
+  labels:
+    app: nifty-dashboard
+    component: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nifty-dashboard
+  template:
+    metadata:
+      labels:
+        app: nifty-dashboard
+        component: ui
+    spec:
+      containers:
+        - name: nifty-dashboard
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "uvicorn", "dashboard:app", "--host", "0.0.0.0", "--port", "8080"]
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: algo-trading-config
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard-service
+  namespace: algo-trading
+  labels:
+    app: nifty-dashboard
+spec:
+  selector:
+    app: nifty-dashboard
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+      name: http
+  type: NodePort   # Exposed locally via NodePort
+  # Access via: http://$(minikube ip):$(NodePort)
